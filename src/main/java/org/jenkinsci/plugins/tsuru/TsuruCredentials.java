@@ -21,7 +21,7 @@ public class TsuruCredentials extends UsernamePasswordCredentialsImpl {
             BaseStandardCredentialsDescriptor {
         @Override
         public String getDisplayName() {
-            return "Tsuru Token for Tsuru Client Plugin";
+            return "Tsuru credentials for Tsuru Client Plugin";
         }
     }
 

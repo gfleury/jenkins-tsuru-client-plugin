@@ -26,8 +26,12 @@ class TsuruDSL implements Serializable {
 
     public TsuruApi connect() {
         TsuruApi apiInstance = new TsuruApi();
-        apiInstance.getApiClient().setBasePath(currentContext.getServerUrl());
-        LoginToken token = apiInstance.login(currentContext.g, password);
+        String apiUrl = currentContext.getServerUrl();
+        if (apiUrl.endsWith("/")) {
+            apiUrl = apiUrl.substring(0, apiUrl.length() - 1);
+        }
+        apiInstance.getApiClient().setBasePath(apiUrl);
+        LoginToken token = apiInstance.login(currentContext.getEmail(), currentContext.getPassword());
         return apiInstance;
     }
 
@@ -125,7 +129,7 @@ class TsuruDSL implements Serializable {
             if (this.@credentialsId != null) {
                 TsuruCredentials cred = CredentialsProvider.findCredentialById(credentialsId, TsuruCredentials.class, script.$build(), Collections.emptyList());
                 if (cred != null) {
-                    return cred.getPassword();
+                    return cred.getPassword().plainText;
                 }
             }
             return this.@password;
@@ -182,11 +186,11 @@ class TsuruDSL implements Serializable {
         return currentContext.getServerUrl();
     }
 
-    public <V> V withAPI(Object oname=null, Object ousername=null, Object opassword=null, Closure<V> body) {
-        String name = toSingleString(oname);
-        String credentialId = toSingleString(ousername);
-        String username = toSingleString(ousername);
-        String password = toSingleString(opassword);
+    public <V> V withAPI(Object tname =null, Object tusername=null, Object tpassword=null, Closure<V> body) {
+        String name = toSingleString(tname);
+        String credentialId = toSingleString(tusername);
+        String username = toSingleString(tusername);
+        String password = toSingleString(tpassword);
 
         node {
 
@@ -283,5 +287,14 @@ class TsuruDSL implements Serializable {
         return l;
     }
 
-
+    private <V> V node(Closure<V> body) {
+        if (script.env.NODE_NAME != null) {
+            // Already inside a node block.
+            body()
+        } else {
+            script.node {
+                body()
+            }
+        }
+    }
 }
