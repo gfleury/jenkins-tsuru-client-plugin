@@ -246,8 +246,9 @@ public class TsuruBuilder extends Builder {
             if (computer != null) {
                 computerEnv = computer.getEnvironment();
             } else {
-                if (launcher != null)
+                if (launcher != null) {
                     computer = launcher.getComputer();
+                }
                 if (computer != null) {
                     computerEnv = computer.getEnvironment();
                 }

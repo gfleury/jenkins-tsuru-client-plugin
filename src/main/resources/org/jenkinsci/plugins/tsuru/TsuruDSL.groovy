@@ -7,6 +7,10 @@ import hudson.FilePath
 import hudson.Util
 import io.tsuru.client.api.TsuruApi
 import io.tsuru.client.model.LoginToken
+import io.tsuru.client.ApiException
+import org.jenkinsci.plugins.tsuru.pipeline.TsuruAction
+import org.jenkinsci.plugins.tsuru.utils.TarGzip
+import org.jenkinsci.plugins.tsuru.pipeline.TsuruContextInit
 
 import java.util.logging.Logger
 
@@ -20,19 +24,36 @@ class TsuruDSL implements Serializable {
 
     private transient Tsuru.DescriptorImpl config = new Tsuru.DescriptorImpl();
 
+    private transient TsuruApi apiInstance = null;
+
+    Boolean authenticated = false;
+
     public TsuruDSL(org.jenkinsci.plugins.workflow.cps.CpsScript script) {
         this.script = script;
     }
 
     public TsuruApi connect() {
-        TsuruApi apiInstance = new TsuruApi();
+        apiInstance = new TsuruApi();
         String apiUrl = currentContext.getServerUrl();
         if (apiUrl.endsWith("/")) {
             apiUrl = apiUrl.substring(0, apiUrl.length() - 1);
         }
         apiInstance.getApiClient().setBasePath(apiUrl);
         LoginToken token = apiInstance.login(currentContext.getEmail(), currentContext.getPassword());
+        authenticated = true;
         return apiInstance;
+    }
+
+    public Boolean deploy(String appName) {
+        HashMap<String, String> Param = new HashMap<String, String>();
+        Param.put("appName", appName);
+        Map Args = [
+                apiInstance: this.apiInstance,
+                action: TsuruAction.Action.DEPLOY,
+                Args: Param
+        ]
+        TsuruAction.Execution result = script._TsuruAction(Args);
+        return result.result;
     }
 
     private Context currentContext = null;
@@ -51,6 +72,7 @@ class TsuruDSL implements Serializable {
     private class Context implements Serializable {
 
         protected final Context parent;
+        private final TsuruContextInit.Execution exec;
 
         private String credentialsId;
         private String email = null;
@@ -64,6 +86,7 @@ class TsuruDSL implements Serializable {
         protected Context(Context parent, ContextId id) {
             this.@parent = parent;
             this.@id = id;
+            this.@exec = script._TsuruContextInit();
         }
 
         public <V> V run(Closure<V> body) {
