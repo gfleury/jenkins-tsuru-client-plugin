@@ -47,9 +47,29 @@ class TsuruDSL implements Serializable {
     public Boolean deploy(String appName) {
         HashMap<String, String> Param = new HashMap<String, String>();
         Param.put("appName", appName);
+        return executeTsuruAction(TsuruAction.Action.DEPLOY, Param);
+    }
+
+    public Boolean build(String appName, String imageTag) {
+        HashMap<String, String> Param = new HashMap<String, String>();
+        Param.put("appName", appName);
+        Param.put("imageTag", imageTag);
+        return executeTsuruAction(TsuruAction.Action.BUILD, Param);
+    }
+
+    public Boolean setEnv(String appName, String env, Boolean restartApp, Boolean isPrivate) {
+        HashMap<String, String> Param = new HashMap<String, String>();
+        Param.put("appName", appName);
+        Param.put("env", appName);
+        Param.put("restartApp", restartApp.toString());
+        Param.put("private", isPrivate.toString());
+        return executeTsuruAction(TsuruAction.Action.ENV_SET, Param);
+    }
+
+    private Boolean executeTsuruAction (TsuruAction.Action action, HashMap<String, String> Param) {
         Map Args = [
                 apiInstance: this.apiInstance,
-                action: TsuruAction.Action.DEPLOY,
+                action: action,
                 Args: Param
         ]
         TsuruAction.Execution result = script._TsuruAction(Args);
