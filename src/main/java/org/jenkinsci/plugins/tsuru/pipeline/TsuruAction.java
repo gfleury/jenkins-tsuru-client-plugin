@@ -19,6 +19,7 @@ import org.kohsuke.stapler.DataBoundConstructor;
 
 import javax.inject.Inject;
 import java.io.File;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -194,7 +195,7 @@ public class TsuruAction extends AbstractStepImpl {
                 case ROLLBACK:
                     try {
                         getListener().getLogger().println("[app-deploy-rollback] Starting Tsuru application deployment rollback ========>");
-                        String output = step.apiInstance.appDeployRollback(step.Args.get("appName"), step.Args.get("imageOrigin"), step.Args.get("imageTag"));
+                        String output = step.apiInstance.appDeployRollback(step.Args.get("appName"), step.Args.get("origin"), step.Args.get("imageTag"));
                         getListener().getLogger().print(output);
                         if (!output.endsWith("OK")) {
                             throw new ApiException("[app-deploy-rollback] Tsuru deployment rollback FAILED ˆˆˆˆˆˆˆˆˆ");
@@ -240,7 +241,17 @@ public class TsuruAction extends AbstractStepImpl {
                     getListener().getLogger().println("[env-set] Environment variable setted =======>");
                     getListener().getLogger().flush();
                     setResult(true);
-
+                case APP_CREATE:
+                    try {
+                        getListener().getLogger().println("[app-create] Creating application on Tsuru ========>");
+                        String output = step.apiInstance.appCreate(step.Args.get("appName"), step.Args.get("platform"), step.Args.get("plan"), step.Args.get("teamOwner"), step.Args.get("pool"), step.Args.get("appDescription"), Arrays.asList(step.Args.get("tags").split(",")), step.Args.get("router"), Arrays.asList(step.Args.get("routerOpts").split(",")));
+                    } catch (ApiException e) {
+                        getListener().getLogger().print(e.toString());
+                        setResult(false);
+                    }
+                    getListener().getLogger().println("[app-create] Application created =======>");
+                    getListener().getLogger().flush();
+                    setResult(true);
                     default:
                         getListener().getLogger().println("[tsuru] Jenkins plugin method not implemented.");
 

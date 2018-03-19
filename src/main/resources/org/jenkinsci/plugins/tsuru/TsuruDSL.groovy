@@ -50,6 +50,13 @@ class TsuruDSL implements Serializable {
         return executeTsuruAction(TsuruAction.Action.DEPLOY, Param);
     }
 
+    public Boolean rollback(String appName, String imageTag) {
+        HashMap<String, String> Param = new HashMap<String, String>();
+        Param.put("appName", appName);
+        Param.put("imageTag", imageTag);
+        return executeTsuruAction(TsuruAction.Action.ROLLBACK, Param);
+    }
+
     public Boolean build(String appName, String imageTag) {
         HashMap<String, String> Param = new HashMap<String, String>();
         Param.put("appName", appName);
@@ -64,6 +71,26 @@ class TsuruDSL implements Serializable {
         Param.put("restartApp", restartApp.toString());
         Param.put("private", isPrivate.toString());
         return executeTsuruAction(TsuruAction.Action.ENV_SET, Param);
+    }
+
+    public Boolean create(String appName, String platform, String appDescription) {
+        return create(appName, platform, null, null, null, appDescription, null, null, "");
+    }
+
+    public Boolean create(String appName, String platform, String plan, String teamOwner,
+                          String pool, String appDescription, String tags, String router,
+                          String routerOpts) {
+        HashMap<String, String> Param = new HashMap<String, String>();
+        Param.put("appName", appName);
+        Param.put("platform", platform);
+        Param.put("plan", plan);
+        Param.put("teamOwner", teamOwner);
+        Param.put("pool", pool);
+        Param.put("appDescription", appDescription);
+        Param.put("tags", tags);
+        Param.put("router", router);
+        Param.put("routerOpts", routerOpts);
+        return executeTsuruAction(TsuruAction.Action.APP_CREATE, Param);
     }
 
     private Boolean executeTsuruAction (TsuruAction.Action action, HashMap<String, String> Param) {
