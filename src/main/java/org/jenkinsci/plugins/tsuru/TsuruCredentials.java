@@ -1,27 +1,34 @@
 package org.jenkinsci.plugins.tsuru;
 
-import com.cloudbees.plugins.credentials.CredentialsScope;
-import com.cloudbees.plugins.credentials.impl.BaseStandardCredentials;
-import com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl;
-import hudson.Extension;
+import com.cloudbees.plugins.credentials.CredentialsNameProvider;
+import com.cloudbees.plugins.credentials.NameWith;
+import com.cloudbees.plugins.credentials.common.StandardCredentials;
+import edu.umd.cs.findbugs.annotations.NonNull;
+import hudson.Util;
 import hudson.util.Secret;
-import org.kohsuke.stapler.DataBoundConstructor;
 
-public class TsuruCredentials extends UsernamePasswordCredentialsImpl {
+@NameWith(value = TsuruCredentials.NameProvider.class, priority = 1)
+public interface TsuruCredentials extends StandardCredentials {
+    /** Serial UID from 1.16. */
+    long serialVersionUID = -8931505925778535681L;
 
+    String getDisplayName();
 
-    @DataBoundConstructor
-    public TsuruCredentials(CredentialsScope scope, String id,
-                            String description, String username, String password) {
-        super(scope, id, description, username, password);
-    }
+    public Secret getSecretKey();
 
-    @Extension
-    public static class DescriptorImpl extends
-            BaseStandardCredentialsDescriptor {
+    /**
+     * Our name provider.
+     */
+    public static class NameProvider extends CredentialsNameProvider<TsuruCredentials> {
+
+        /**
+         * {@inheritDoc}
+         */
+        @NonNull
         @Override
-        public String getDisplayName() {
-            return "Tsuru credentials for Tsuru Client Plugin";
+        public String getName(@NonNull TsuruCredentials c) {
+            String description = Util.fixEmptyAndTrim(c.getDescription());
+            return c.getDisplayName() + (description != null ? " (" + description + ")" : "");
         }
     }
 

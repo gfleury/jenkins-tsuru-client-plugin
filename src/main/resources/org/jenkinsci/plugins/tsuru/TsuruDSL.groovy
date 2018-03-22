@@ -2,14 +2,13 @@ package org.jenkinsci.plugins.tsuru
 
 import com.cloudbees.groovy.cps.NonCPS
 import com.cloudbees.plugins.credentials.CredentialsProvider
+import com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl
 import hudson.AbortException
 import hudson.FilePath
 import hudson.Util
 import io.tsuru.client.api.TsuruApi
 import io.tsuru.client.model.LoginToken
-import io.tsuru.client.ApiException
 import org.jenkinsci.plugins.tsuru.pipeline.TsuruAction
-import org.jenkinsci.plugins.tsuru.utils.TarGzip
 import org.jenkinsci.plugins.tsuru.pipeline.TsuruContextInit
 
 import java.util.logging.Logger
@@ -39,19 +38,25 @@ class TsuruDSL implements Serializable {
             apiUrl = apiUrl.substring(0, apiUrl.length() - 1);
         }
         apiInstance.getApiClient().setBasePath(apiUrl);
-        LoginToken token = apiInstance.login(currentContext.getEmail(), currentContext.getPassword());
+        if (currentContext.getEmail() != null) {
+            LoginToken token = apiInstance.login(currentContext.getEmail(), currentContext.getPassword());
+        } else {
+            apiInstance.getApiClient().addDefaultHeader("Authorization", "bearer " + currentContext.getToken());
+        }
         authenticated = true;
         return apiInstance;
     }
 
     public Boolean deploy(String appName) {
         HashMap<String, String> Param = new HashMap<String, String>();
+        appName = appName.toLowerCase();
         Param.put("appName", appName);
         return executeTsuruAction(TsuruAction.Action.DEPLOY, Param);
     }
 
     public Boolean rollback(String appName, String imageTag) {
         HashMap<String, String> Param = new HashMap<String, String>();
+        appName = appName.toLowerCase();
         Param.put("appName", appName);
         Param.put("imageTag", imageTag);
         return executeTsuruAction(TsuruAction.Action.ROLLBACK, Param);
@@ -59,6 +64,7 @@ class TsuruDSL implements Serializable {
 
     public Boolean build(String appName, String imageTag) {
         HashMap<String, String> Param = new HashMap<String, String>();
+        appName = appName.toLowerCase();
         Param.put("appName", appName);
         Param.put("imageTag", imageTag);
         return executeTsuruAction(TsuruAction.Action.BUILD, Param);
@@ -66,6 +72,7 @@ class TsuruDSL implements Serializable {
 
     public Boolean setEnv(String appName, String env, Boolean restartApp, Boolean isPrivate) {
         HashMap<String, String> Param = new HashMap<String, String>();
+        appName = appName.toLowerCase();
         Param.put("appName", appName);
         Param.put("env", appName);
         Param.put("restartApp", restartApp.toString());
@@ -81,6 +88,7 @@ class TsuruDSL implements Serializable {
                           String pool, String appDescription, String tags, String router,
                           String routerOpts) {
         HashMap<String, String> Param = new HashMap<String, String>();
+        appName = appName.toLowerCase();
         Param.put("appName", appName);
         Param.put("platform", platform);
         Param.put("plan", plan);
@@ -91,6 +99,30 @@ class TsuruDSL implements Serializable {
         Param.put("router", router);
         Param.put("routerOpts", routerOpts);
         return executeTsuruAction(TsuruAction.Action.APP_CREATE, Param);
+    }
+
+    public String createPRApp(String appName, String prID) {
+        HashMap<String, String> Param = new HashMap<String, String>();
+        appName = appName.toLowerCase();
+        prID = prID.toLowerCase();
+        String newAppName = appName + "-" + prID;
+        Param.put("appName", appName);
+        Param.put("newAppName", newAppName);
+
+        if(executeTsuruAction(TsuruAction.Action.APP_CLONE, Param))
+            return newAppName;
+
+        return null;
+
+    }
+
+    public Boolean clone(String appName, String newAppName) {
+        HashMap<String, String> Param = new HashMap<String, String>();
+        appName = appName.toLowerCase();
+        Param.put("appName", appName);
+        Param.put("newAppName", newAppName);
+
+        return executeTsuruAction(TsuruAction.Action.APP_CLONE, Param);
     }
 
     private Boolean executeTsuruAction (TsuruAction.Action action, HashMap<String, String> Param) {
@@ -124,6 +156,7 @@ class TsuruDSL implements Serializable {
         private String credentialsId;
         private String email = null;
         private String password = null;
+        private String token = null;
         private String serverUrl;
         private String application;
         private ContextId id;
@@ -179,7 +212,7 @@ class TsuruDSL implements Serializable {
 
         public String getEmail() {
             if (this.@credentialsId != null) {
-                TsuruCredentials cred = CredentialsProvider.findCredentialById(credentialsId, TsuruCredentials.class, script.$build(), Collections.emptyList());
+                UsernamePasswordCredentialsImpl cred = CredentialsProvider.findCredentialById(credentialsId, UsernamePasswordCredentialsImpl.class, script.$build(), Collections.emptyList());
                 if (cred != null) {
                     return cred.getUsername();
                 }
@@ -197,12 +230,26 @@ class TsuruDSL implements Serializable {
 
         public String getPassword() {
             if (this.@credentialsId != null) {
-                TsuruCredentials cred = CredentialsProvider.findCredentialById(credentialsId, TsuruCredentials.class, script.$build(), Collections.emptyList());
+                UsernamePasswordCredentialsImpl cred = CredentialsProvider.findCredentialById(credentialsId, UsernamePasswordCredentialsImpl.class, script.$build(), Collections.emptyList());
                 if (cred != null) {
                     return cred.getPassword().plainText;
                 }
             }
             return this.@password;
+        }
+
+        void setToken(String token) {
+            this.token = token
+        }
+
+        public String getToken() {
+            if (this.@credentialsId != null) {
+                TsuruCredentials cred = CredentialsProvider.findCredentialById(credentialsId, TsuruCredentialsImpl.class, script.$build(), Collections.emptyList());
+                if (cred != null) {
+                    return cred.getToken();
+                }
+            }
+            return this.@token;
         }
 
         public void setCredentialsId(String credentialsId) {
@@ -277,7 +324,7 @@ class TsuruDSL implements Serializable {
 
             if (cc != null) {
                 context.setCredentialsId(cc.credentialsId);
-                context.setApplication(cc.defaultApplication);
+                context.setApplication("tsuru-dashboard");
                 context.setServerUrl(cc.getServerUrl());
             }
 

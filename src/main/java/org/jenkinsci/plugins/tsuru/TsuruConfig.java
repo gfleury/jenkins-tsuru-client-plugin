@@ -1,6 +1,8 @@
 package org.jenkinsci.plugins.tsuru;
 
+import com.cloudbees.plugins.credentials.SecretBytes;
 import com.cloudbees.plugins.credentials.common.StandardListBoxModel;
+import com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl;
 import hudson.Extension;
 import hudson.Util;
 import hudson.model.AbstractDescribableImpl;
@@ -9,7 +11,6 @@ import hudson.security.ACL;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import jenkins.model.Jenkins;
-import org.jenkinsci.plugins.scriptsecurity.sandbox.whitelists.Whitelisted;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
@@ -24,9 +25,6 @@ public class TsuruConfig extends AbstractDescribableImpl<TsuruConfig> implements
 
     // API server URL for the cluster.
     private String serverUrl;
-
-    // If this cluster is reference, what project to assume, if any.
-    private String defaultApplication;
 
     private String credentialsId;
 
@@ -46,15 +44,6 @@ public class TsuruConfig extends AbstractDescribableImpl<TsuruConfig> implements
     @DataBoundSetter
     public void setServerUrl(String serverUrl) {
         this.serverUrl = Util.fixEmptyAndTrim(serverUrl);
-    }
-
-    public String getDefaultApplication() {
-        return defaultApplication;
-    }
-
-    @DataBoundSetter
-    public void setDefaultApplication(String defaultApplication) {
-        this.defaultApplication = Util.fixEmptyAndTrim(defaultApplication);
     }
 
     public String getCredentialsId() {
@@ -90,13 +79,11 @@ public class TsuruConfig extends AbstractDescribableImpl<TsuruConfig> implements
         return new StandardListBoxModel()
                 .includeEmptyValue()
                 .includeAs(ACL.SYSTEM, Jenkins.getInstance(),
-                        TsuruCredentials.class)
-                // .includeAs(ACL.SYSTEM, Jenkins.getInstance(),
-                // StandardUsernamePasswordCredentials.class)
+                        UsernamePasswordCredentialsImpl.class)
+                .includeAs(ACL.SYSTEM, Jenkins.getInstance(),
+                        TsuruCredentialsImpl.class)
                 // .includeAs(ACL.SYSTEM, Jenkins.getInstance(),
                 // StandardCertificateCredentials.class)
-                // TODO: Make own type for token or use the existing token
-                // generator auth type used by sync plugin? or kubernetes?
                 .includeCurrentValue(credentialsId);
     }
 

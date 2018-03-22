@@ -14,8 +14,4 @@
         <c:select/>
     </f:entry>
 
-    <f:entry title="${%Default Project}" field="defaultApplication">
-        <f:textbox/>
-    </f:entry>
-
 </j:jelly>

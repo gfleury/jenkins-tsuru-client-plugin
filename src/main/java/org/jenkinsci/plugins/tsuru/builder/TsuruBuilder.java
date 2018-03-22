@@ -15,6 +15,7 @@ import hudson.util.ListBoxModel;
 import org.jenkinsci.plugins.tsuru.Tsuru;
 import org.jenkinsci.plugins.tsuru.TsuruConfig;
 import org.jenkinsci.plugins.tsuru.TsuruCredentials;
+import org.jenkinsci.plugins.tsuru.TsuruCredentialsImpl;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 
@@ -23,7 +24,6 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
@@ -131,12 +131,9 @@ public class TsuruBuilder extends Builder {
         if (Strings.isNullOrEmpty(getProject(overrides))) { // No project was provided
             // for this step
             if (c != null) { // But a cluster definition was provided
-                project = c.getDefaultApplication();
-                if (Strings.isNullOrEmpty(project)) {
                     throw new IOException(
                             "No project defined in step or in cluster: "
                                     + getClusterName(overrides));
-                }
             } else {
                 project = "tsuru-dashboard";
             }
@@ -160,16 +157,16 @@ public class TsuruBuilder extends Builder {
         }
 
         if (!Strings.isNullOrEmpty(actualCredentialsId)) {
-            TsuruCredentials tokenSecret = CredentialsProvider
+            TsuruCredentialsImpl tokenSecret = CredentialsProvider
                     .findCredentialById(actualCredentialsId,
-                            TsuruCredentials.class, build,
+                            TsuruCredentialsImpl.class, build,
                             new ArrayList<DomainRequirement>());
             if (tokenSecret == null) {
                 throw new IOException(
                         "Unable to find credential in Jenkins credential store: "
                                 + actualCredentialsId);
             }
-            token = tokenSecret.getUsername();
+            token = tokenSecret.getToken();
         }
 
         final String finalSelectedCAPath = selectedCAPath;

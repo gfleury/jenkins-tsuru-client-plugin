@@ -91,7 +91,7 @@ public class TarGzip {
             taos.closeArchiveEntry();
             // go through all the files in the directory and using recursion, add them to the archive
             for (File childFile : file.listFiles()) {
-                addFilesToCompression(taos, childFile, file.getName());
+                addFilesToCompression(taos, childFile, dir + File.separator + file.getName());
             }
         }
     }

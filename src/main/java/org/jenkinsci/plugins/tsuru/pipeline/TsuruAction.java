@@ -10,6 +10,8 @@ import hudson.model.Run;
 import hudson.model.TaskListener;
 import io.tsuru.client.ApiException;
 import io.tsuru.client.api.TsuruApi;
+import io.tsuru.client.model.Application;
+import org.jenkinsci.plugins.tsuru.utils.JGit;
 import org.jenkinsci.plugins.tsuru.utils.TarGzip;
 import org.jenkinsci.plugins.workflow.steps.AbstractStepDescriptorImpl;
 import org.jenkinsci.plugins.workflow.steps.AbstractStepImpl;
@@ -18,16 +20,18 @@ import org.jenkinsci.plugins.workflow.steps.StepContextParameter;
 import org.kohsuke.stapler.DataBoundConstructor;
 
 import javax.inject.Inject;
+import java.io.BufferedReader;
 import java.io.File;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
+import java.io.FilenameFilter;
+import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.util.*;
 
 public class TsuruAction extends AbstractStepImpl {
 
     public enum Action {
         DEPLOY, ROLLBACK, BUILD,
-        APP_CREATE, APP_REMOVE,
+        APP_CREATE, APP_REMOVE, APP_CLONE,
         ENV_SET, ENV_GET,
     }
 
@@ -174,87 +178,160 @@ public class TsuruAction extends AbstractStepImpl {
                     // Create temp deployment file
                     File deploymentFile = File.createTempFile("deploymentFile", ".tgz");
                     deploymentFile.deleteOnExit();
-                    System.out.println("Deploying file " + deploymentFile);
-                    System.out.println("Directory: " + getWorkspaceFilePath());
-                    TarGzip.compressFile(new File(getWorkspaceFilePath().toString()), deploymentFile);
-                    try {
-                        getListener().getLogger().println("[app-deploy] Starting Tsuru application deployment ========>");
-                        String output = step.apiInstance.appDeploy(step.Args.get("appName"), deploymentFile, step.Args.get("imageTag"));
-                        getListener().getLogger().print(output);
-                        if (!output.endsWith("OK")) {
-                            throw new ApiException("[app-deploy] Tsuru deployment FAILED ˆˆˆˆˆˆˆˆˆ");
-                        }
+                    getListener().getLogger().println("[app-deploy] Deploying file " + deploymentFile);
+                    getListener().getLogger().println("[app-deploy] Directory: " + getWorkspaceFilePath());
 
-                    } catch (ApiException e) {
-                        getListener().getLogger().print(e.toString());
-                        setResult(false);
+                    File fileDir = new File(getWorkspaceFilePath().getRemote() + "/");
+
+                    ArrayList<File> fileList = new ArrayList<File>(fileDir.listFiles().length);
+
+                    File tsuruIgnore = new File(fileDir.getAbsolutePath() + File.separator + ".tsuruignore");
+                    List<String> ignoredFiles = new ArrayList<>();
+
+                    try {
+                        if (tsuruIgnore.exists()) {
+                            ignoredFiles = Files.readAllLines(tsuruIgnore.toPath());
+                            getListener().getLogger().println("[app-deploy] Ignoring files on deployment: " + ignoredFiles);
+                        }
+                    } catch (Exception e) {
                     }
+
+                    for (File childFile : fileDir.listFiles()) {
+                        Boolean ignoreFile = false;
+                        for (String k: ignoredFiles) {
+                            if (k.equals(childFile.getName())) {
+                                ignoreFile = true;
+                                continue;
+                            }
+                        }
+                        if (!ignoreFile)
+                            fileList.add(childFile);
+                    }
+
+                    TarGzip.compressFiles(fileList, deploymentFile);
+
+                    JGit repository = new JGit(new File(getWorkspaceFilePath().getRemote() + "/.git"));
+                    getListener().getLogger().println("[app-deploy] Deploying last commit message: " + repository.getLog(1));
+                    repository.close();
+
+                    getListener().getLogger().println("[app-deploy] Starting Tsuru application deployment ========>");
+                    int timeout = step.apiInstance.getApiClient().getReadTimeout();
+                    step.apiInstance.getApiClient().setReadTimeout(600000); // Same BuildTimeout than TSURU
+                    String output = step.apiInstance.appDeploy(step.Args.get("appName"), deploymentFile, step.Args.get("imageTag"));
+                    step.apiInstance.getApiClient().setReadTimeout(timeout);
+                    getListener().getLogger().println(output);
+                    if (!output.endsWith("OK\n")) {
+                        throw new ApiException("[app-deploy] Tsuru deployment FAILED ˆˆˆˆˆˆˆˆˆ");
+                    }
+
                     getListener().getLogger().println("[app-deploy] Finishing Tsuru application deployment =======>");
                     getListener().getLogger().flush();
                     setResult(true);
+                    break;
                 case ROLLBACK:
-                    try {
-                        getListener().getLogger().println("[app-deploy-rollback] Starting Tsuru application deployment rollback ========>");
-                        String output = step.apiInstance.appDeployRollback(step.Args.get("appName"), step.Args.get("origin"), step.Args.get("imageTag"));
-                        getListener().getLogger().print(output);
-                        if (!output.endsWith("OK")) {
-                            throw new ApiException("[app-deploy-rollback] Tsuru deployment rollback FAILED ˆˆˆˆˆˆˆˆˆ");
-                        }
-
-                    } catch (ApiException e) {
-                        getListener().getLogger().print(e.toString());
-                        setResult(false);
+                    getListener().getLogger().println("[app-deploy-rollback] Starting Tsuru application deployment rollback ========>");
+                    output = step.apiInstance.appDeployRollback(step.Args.get("appName"), step.Args.get("origin"), step.Args.get("imageTag"));
+                    getListener().getLogger().println(output);
+                    if (!output.endsWith("OK\n")) {
+                        throw new ApiException("[app-deploy-rollback] Tsuru deployment rollback FAILED ˆˆˆˆˆˆˆˆˆ");
                     }
+
                     getListener().getLogger().println("[app-deploy-rollback] Finishing Tsuru application deployment rollback =======>");
                     getListener().getLogger().flush();
                     setResult(true);
+                    break;
                 case BUILD:
                     // Create temp deployment file for building Image
                     deploymentFile = File.createTempFile("deploymentFile", ".tgz");
                     deploymentFile.deleteOnExit();
                     System.out.println("Building image from deployment file " + deploymentFile);
                     System.out.println("Directory: " + getWorkspaceFilePath());
-                    TarGzip.compressFile(new File(getWorkspaceFilePath().toString()), deploymentFile);
-                    try {
-                        getListener().getLogger().println("[app-build] Starting Tsuru application building ========>");
-                        String output = step.apiInstance.appBuild(step.Args.get("appName"), step.Args.get("imageTag"), deploymentFile);
-                        getListener().getLogger().print(output);
-                        if (!output.endsWith("OK")) {
-                            throw new ApiException("[app-build] Tsuru building FAILED ˆˆˆˆˆˆˆˆˆ");
-                        }
-                    } catch (ApiException e) {
-                        getListener().getLogger().print(e.toString());
-                        setResult(false);
+
+                    TarGzip.compressFile(new File(getWorkspaceFilePath().getRemote()), deploymentFile);
+
+                    getListener().getLogger().println("[app-build] Starting Tsuru application building ========>");
+                    output = step.apiInstance.appBuild(step.Args.get("appName"), step.Args.get("imageTag"), deploymentFile);
+                    getListener().getLogger().println(output);
+                    if (!output.endsWith("OK")) {
+                        throw new ApiException("[app-build] Tsuru building FAILED ˆˆˆˆˆˆˆˆˆ");
                     }
+
                     getListener().getLogger().println("[app-build] Finishing Tsuru application build =======>");
                     getListener().getLogger().println("[app-build] Image available under TAG: " + step.Args.get("imageTag"));
                     getListener().getLogger().flush();
                     setResult(true);
+                    break;
                 case ENV_SET:
-                    try {
-                        getListener().getLogger().println("[env-set] Setting environment variable ========>");
-                        String output = step.apiInstance.envSet(step.Args.get("appName"), step.Args.get("env"), Boolean.getBoolean(step.Args.get("restartApp")), Boolean.getBoolean(step.Args.get("private")));
-                    } catch (ApiException e) {
-                        getListener().getLogger().print(e.toString());
-                        setResult(false);
-                    }
+                    getListener().getLogger().println("[env-set] Setting environment variable ========>");
+                    String[] kv = step.Args.get("env").split("=");
+                    io.tsuru.client.model.EnvVars envVar = new io.tsuru.client.model.EnvVars(kv[0], kv[1]);
+                    output = step.apiInstance.envSet(step.Args.get("appName"), Arrays.asList(envVar), Boolean.getBoolean(step.Args.get("restartApp")), Boolean.getBoolean(step.Args.get("private")));
+                    getListener().getLogger().println(output);
+
                     getListener().getLogger().println("[env-set] Environment variable setted =======>");
                     getListener().getLogger().flush();
                     setResult(true);
+                    break;
                 case APP_CREATE:
-                    try {
-                        getListener().getLogger().println("[app-create] Creating application on Tsuru ========>");
-                        String output = step.apiInstance.appCreate(step.Args.get("appName"), step.Args.get("platform"), step.Args.get("plan"), step.Args.get("teamOwner"), step.Args.get("pool"), step.Args.get("appDescription"), Arrays.asList(step.Args.get("tags").split(",")), step.Args.get("router"), Arrays.asList(step.Args.get("routerOpts").split(",")));
-                    } catch (ApiException e) {
-                        getListener().getLogger().print(e.toString());
-                        setResult(false);
+                    getListener().getLogger().println("[app-create] Creating application on Tsuru ========>");
+                    String[] routerOpts = step.Args.get("routerOpts").split(",");
+                    HashMap<String,String> routerOptsMap = new HashMap<>();
+                    for (String routerOpt: routerOpts) {
+                        kv = routerOpt.split("=");
+                        if (kv.length > 1) {
+                            routerOptsMap.put(kv[0], kv[1]);
+                        }
                     }
+                    output = step.apiInstance.appCreate(step.Args.get("appName"), step.Args.get("platform"), step.Args.get("plan"), step.Args.get("teamOwner"), step.Args.get("pool"), step.Args.get("appDescription"), Arrays.asList(step.Args.get("tags").split(",")), step.Args.get("router"), routerOptsMap);
+                    getListener().getLogger().println(output);
+
                     getListener().getLogger().println("[app-create] Application created =======>");
                     getListener().getLogger().flush();
                     setResult(true);
-                    default:
-                        getListener().getLogger().println("[tsuru] Jenkins plugin method not implemented.");
+                    break;
+                case APP_CLONE:
+                    String newAppName = step.Args.get("newAppName").toLowerCase();
+                    try {
+                        getListener().getLogger().println("[app-clone] Retrieving application on Tsuru ========>");
+                        Application originalApp = step.apiInstance.appInfo(step.Args.get("appName"));
+                        io.tsuru.client.model.EnvVars[] envVars = step.apiInstance.envGet(originalApp.getName(), null);
 
+                        getListener().getLogger().println("[app-clone] Creating the cloned application on Tsuru ========>");
+                        String plan = originalApp.getPlan().getName().equals("autogenerated") ? null : originalApp.getPlan().getName();
+                        Map routerOptsMaps = originalApp.getRouters().get(0).getOpts();
+                        output = step.apiInstance.appCreate(newAppName, originalApp.getPlatform(), plan, originalApp.getTeamOwner(),
+                                originalApp.getPool(), originalApp.getDescription(), originalApp.getTag(), originalApp.getRouters().get(0).getName(), routerOptsMaps);
+                        getListener().getLogger().println(output);
+
+                        for (io.tsuru.client.model.EnvVars e : envVars) {
+                            if (!e.getName().startsWith("TSURU_")) { // Do no update or add TSURU* related Environment variables
+                                output = step.apiInstance.envSet(newAppName, Arrays.asList(e), false, !e.getIsPublic());
+                                getListener().getLogger().println(output);
+                            }
+                        }
+                    } catch (ApiException e) {
+                        getListener().getLogger().println(e.toString() + ": " + e.getResponseBody());
+                        try {
+                            if (e.getCode() != 409) { // Ignore failing due to already existent application
+                                // Rollback the new app creation due to some failure.
+                                output = step.apiInstance.appRemove(newAppName);
+                                getListener().getLogger().println(output);
+                            } else {
+                                setResult(true);
+                                break;
+                            }
+                        } catch (Exception ie) {
+                            getListener().getLogger().println(ie.toString());
+                        }
+                        setResult(false);
+                        break;
+                    }
+                    getListener().getLogger().println("[app-clone] Application cloned successfully =======>");
+                    getListener().getLogger().flush();
+                    setResult(true);
+                    break;
+                default:
+                    getListener().getLogger().println("[tsuru] Jenkins plugin method not implemented.");
             }
             return this;
         }
