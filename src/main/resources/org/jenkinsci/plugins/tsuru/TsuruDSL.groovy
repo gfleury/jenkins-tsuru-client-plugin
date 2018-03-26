@@ -4,12 +4,14 @@ import com.cloudbees.groovy.cps.NonCPS
 import com.cloudbees.plugins.credentials.CredentialsProvider
 import com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl
 import hudson.AbortException
+import hudson.EnvVars
 import hudson.FilePath
 import hudson.Util
 import io.tsuru.client.api.TsuruApi
 import io.tsuru.client.model.LoginToken
 import org.jenkinsci.plugins.tsuru.pipeline.TsuruAction
 import org.jenkinsci.plugins.tsuru.pipeline.TsuruContextInit
+import org.jenkinsci.plugins.workflow.cps.EnvActionImpl
 
 import java.util.logging.Logger
 
@@ -48,9 +50,19 @@ class TsuruDSL implements Serializable {
     }
 
     public Boolean deploy(String appName) {
+        return deploy(appName, null);
+    }
+
+    public Boolean deploy(String appName, String message) {
+        return deploy(appName, message, null);
+    }
+
+    public Boolean deploy(String appName, String message, String commit) {
         HashMap<String, String> Param = new HashMap<String, String>();
         appName = appName.toLowerCase();
         Param.put("appName", appName);
+        Param.put("message", message);
+        Param.put("commit", message);
         return executeTsuruAction(TsuruAction.Action.DEPLOY, Param);
     }
 

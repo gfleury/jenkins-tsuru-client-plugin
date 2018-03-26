@@ -11,8 +11,8 @@ import hudson.model.TaskListener;
 import io.tsuru.client.ApiException;
 import io.tsuru.client.api.TsuruApi;
 import io.tsuru.client.model.Application;
-import org.jenkinsci.plugins.tsuru.utils.JGit;
 import org.jenkinsci.plugins.tsuru.utils.TarGzip;
+import org.jenkinsci.plugins.workflow.cps.EnvActionImpl;
 import org.jenkinsci.plugins.workflow.steps.AbstractStepDescriptorImpl;
 import org.jenkinsci.plugins.workflow.steps.AbstractStepImpl;
 import org.jenkinsci.plugins.workflow.steps.AbstractSynchronousStepExecution;
@@ -20,14 +20,29 @@ import org.jenkinsci.plugins.workflow.steps.StepContextParameter;
 import org.kohsuke.stapler.DataBoundConstructor;
 
 import javax.inject.Inject;
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FilenameFilter;
-import java.io.InputStreamReader;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.util.*;
 
 public class TsuruAction extends AbstractStepImpl {
+
+    public static String createDeployMessage(EnvActionImpl p) throws Exception {
+        /*
+            env.DEPLOY_MESSAGE =  "CHANGE_ID : ${env.CHANGE_ID}\n"
+            env.DEPLOY_MESSAGE += "CHANGE_URL : ${env.CHANGE_URL}\n"
+            env.DEPLOY_MESSAGE += "CHANGE_TITLE : ${env.CHANGE_TITLE}\n"
+            env.DEPLOY_MESSAGE += "CHANGE_AUTHOR : ${env.CHANGE_AUTHOR}\n"
+            env.DEPLOY_MESSAGE += "CHANGE_AUTHOR_DISPLAY_NAME : ${env.CHANGE_AUTHOR_DISPLAY_NAME}\n"
+            env.DEPLOY_MESSAGE += "CHANGE_AUTHOR_EMAIL : ${env.CHANGE_AUTHOR_EMAIL}\n"
+            env.DEPLOY_MESSAGE += "CHANGE_TARGET : ${env.CHANGE_TARGET}\n"
+            env.DEPLOY_MESSAGE += "BRANCH_NAME : ${env.BRANCH_NAME}\n"
+            env.DEPLOY_MESSAGE += "GIT_BRANCH : ${env.GIT_BRANCH}\n"
+            env.DEPLOY_MESSAGE += "GIT_COMMIT : ${env.GIT_COMMIT}\n"
+
+         */
+        return p.getEnvironment().toString();
+    }
 
     public enum Action {
         DEPLOY, ROLLBACK, BUILD,
@@ -210,14 +225,10 @@ public class TsuruAction extends AbstractStepImpl {
 
                     TarGzip.compressFiles(fileList, deploymentFile);
 
-                    JGit repository = new JGit(new File(getWorkspaceFilePath().getRemote() + "/.git"));
-                    getListener().getLogger().println("[app-deploy] Deploying last commit message: " + repository.getLog(1));
-                    repository.close();
-
                     getListener().getLogger().println("[app-deploy] Starting Tsuru application deployment ========>");
                     int timeout = step.apiInstance.getApiClient().getReadTimeout();
                     step.apiInstance.getApiClient().setReadTimeout(600000); // Same BuildTimeout than TSURU
-                    String output = step.apiInstance.appDeploy(step.Args.get("appName"), deploymentFile, step.Args.get("imageTag"));
+                    String output = step.apiInstance.appDeploy(step.Args.get("appName"), deploymentFile, step.Args.get("imageTag"), step.Args.get("message"), step.Args.get("commit"));
                     step.apiInstance.getApiClient().setReadTimeout(timeout);
                     getListener().getLogger().println(output);
                     if (!output.endsWith("OK\n")) {
