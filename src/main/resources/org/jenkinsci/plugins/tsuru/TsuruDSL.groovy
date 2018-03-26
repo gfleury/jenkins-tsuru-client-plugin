@@ -62,7 +62,7 @@ class TsuruDSL implements Serializable {
         appName = appName.toLowerCase();
         Param.put("appName", appName);
         Param.put("message", message);
-        Param.put("commit", message);
+        Param.put("commit", commit);
         return executeTsuruAction(TsuruAction.Action.DEPLOY, Param);
     }
 
