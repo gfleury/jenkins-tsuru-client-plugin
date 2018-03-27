@@ -14,7 +14,6 @@ import hudson.tasks.Builder;
 import hudson.util.ListBoxModel;
 import org.jenkinsci.plugins.tsuru.Tsuru;
 import org.jenkinsci.plugins.tsuru.TsuruConfig;
-import org.jenkinsci.plugins.tsuru.TsuruCredentials;
 import org.jenkinsci.plugins.tsuru.TsuruCredentialsImpl;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
@@ -110,10 +109,10 @@ public class TsuruBuilder extends Builder {
         return (new Tsuru.DescriptorImpl()).getClusterConfig(getClusterName(overrides));
     }
 
-    protected boolean runOcCommand(final AbstractBuild build,
+    protected boolean runTsuruCommand(final AbstractBuild build,
                                    final TaskListener listener, final String verb,
                                    final List verbArgs, final List userArgs, final List options,
-                                   final OcProcessRunner runner)
+                                   final TsuruProcessRunner runner)
             throws IOException, InterruptedException {
         final Map<String, String> overrides = consolidateEnvVars(listener, build, null);
         TsuruConfig c = getCluster(overrides);
@@ -175,12 +174,12 @@ public class TsuruBuilder extends Builder {
 
     }
 
-    protected boolean standardRunOcCommand(final AbstractBuild build,
+    protected boolean standardRunTsuruCommand(final AbstractBuild build,
                                            final TaskListener listener, String verb, List verbArgs,
                                            List userArgs, List options)
             throws IOException, InterruptedException {
-        return runOcCommand(build, listener, verb, verbArgs, userArgs, options,
-                new OcProcessRunner() {
+        return runTsuruCommand(build, listener, verb, verbArgs, userArgs, options,
+                new TsuruProcessRunner() {
                     @Override
                     public boolean perform(ProcessBuilder pb)
                             throws IOException, InterruptedException {
@@ -365,7 +364,7 @@ public class TsuruBuilder extends Builder {
                 InterruptedException;
     }
 
-    protected interface OcProcessRunner {
+    protected interface TsuruProcessRunner {
         boolean perform(ProcessBuilder pb) throws IOException,
                 InterruptedException;
     }
