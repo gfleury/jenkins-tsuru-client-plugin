@@ -1,4 +1,4 @@
 <?jelly escape-by-default='true'?>
 <div>
-    This plugin add support for GRaveN, the most advanced build tool ever.
+    This plugin add support for Tsuru, allowing interation with Tsuru servers.
 </div>
