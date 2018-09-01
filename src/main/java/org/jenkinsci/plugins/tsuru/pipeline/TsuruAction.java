@@ -11,6 +11,7 @@ import hudson.model.TaskListener;
 import io.tsuru.client.ApiException;
 import io.tsuru.client.api.TsuruApi;
 import io.tsuru.client.model.Application;
+import io.tsuru.client.model.Deployments;
 import org.jenkinsci.plugins.tsuru.utils.TarGzip;
 import org.jenkinsci.plugins.workflow.cps.EnvActionImpl;
 import org.jenkinsci.plugins.workflow.steps.AbstractStepDescriptorImpl;
@@ -234,9 +235,47 @@ public class TsuruAction extends AbstractStepImpl {
                     getListener().getLogger().println("[app-deploy] Starting Tsuru application deployment ========>");
                     int timeout = step.apiInstance.getApiClient().getReadTimeout();
                     step.apiInstance.getApiClient().setReadTimeout(600000); // Same BuildTimeout than TSURU
-                    String output = step.apiInstance.appDeploy(step.Args.get("appName"), deploymentFile, step.Args.get("imageTag"), step.Args.get("message"), step.Args.get("commit"));
-                    step.apiInstance.getApiClient().setReadTimeout(timeout);
-                    getListener().getLogger().println(output);
+                    String output = "";
+                    try {
+                        output = step.apiInstance.appDeploy(step.Args.get("appName"), deploymentFile, step.Args.get("imageTag"), step.Args.get("message"), step.Args.get("commit"));
+                        getListener().getLogger().println(output);
+                    } catch (io.tsuru.client.ApiException e) {
+                        if (e.getCause() instanceof java.io.IOException) {
+                            int counter = 0;
+                            String id = "";
+                            getListener().getLogger().println("[app-deploy] Logs will be truncated, please check the logs directly on Tsuru!");
+                            do {
+                                List<Deployments> deploys = step.apiInstance.appDeployList(step.Args.get("appName"), 1);
+                                if (deploys.size() > 0) {
+                                    Deployments deployment = deploys.get(0);
+                                    if (id.length() == 0) {
+                                        id = deployment.getId();
+                                    } else if (!id.contains(deployment.getId())) {
+                                        getListener().getLogger().println("[app-deploy] Another deployment started in the meanwhile! Aborting this one!");
+                                        break;
+                                    }
+                                    if (!deployment.getDuration().startsWith("-") && (deployment.getImage().length() != 0 || deployment.getError().length() != 0)) {
+                                        output = step.apiInstance.appLog(step.Args.get("appName"), 20);
+                                        if (deployment.getImage().length() != 0) {
+                                            output += "\nOK\n";
+                                        }
+                                        break;
+                                    }
+                                } else {
+                                    // No deployments at all
+                                    getListener().getLogger().println("[app-deploy] No deployment was found!");
+                                    break;
+                                }
+                                Thread.sleep(5000 + (counter + 500));
+                                counter++;
+                            } while (counter < 20);
+                        } else {
+                            // TODO: Better handling on unauthorized and conflict (another deployment in course)
+                            throw e;
+                        }
+                    } finally {
+                        step.apiInstance.getApiClient().setReadTimeout(timeout);
+                    }
                     if (!output.endsWith("OK\n")) {
                         throw new ApiException("[app-deploy] Tsuru deployment FAILED ˆˆˆˆˆˆˆˆˆ");
                     }
