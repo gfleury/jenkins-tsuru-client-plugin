@@ -238,7 +238,6 @@ public class TsuruAction extends AbstractStepImpl {
                     String output = "";
                     try {
                         output = step.apiInstance.appDeploy(step.Args.get("appName"), deploymentFile, step.Args.get("imageTag"), step.Args.get("message"), step.Args.get("commit"));
-                        getListener().getLogger().println(output);
                     } catch (io.tsuru.client.ApiException e) {
                         if (e.getCause() instanceof java.io.IOException) {
                             int counter = 0;
@@ -274,6 +273,7 @@ public class TsuruAction extends AbstractStepImpl {
                             throw e;
                         }
                     } finally {
+                        getListener().getLogger().println(output);
                         step.apiInstance.getApiClient().setReadTimeout(timeout);
                     }
                     if (!output.endsWith("OK\n")) {
