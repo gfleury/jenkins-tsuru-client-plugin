@@ -198,7 +198,13 @@ public class TsuruAction extends AbstractStepImpl {
 
                     File fileDir = new File(getWorkspaceFilePath().getRemote() + "/");
 
-                    ArrayList<File> fileList = new ArrayList<File>(fileDir.listFiles().length);
+                    ArrayList<File> fileList;
+
+                    if (fileDir != null) {
+                        fileList = new ArrayList<File>(fileDir.listFiles().length);
+                    } else {
+                        throw new IOException("Failed to enumerate files from: " + getWorkspaceFilePath().getRemote() + "/");
+                    }
 
                     File tsuruIgnore = new File(fileDir.getAbsolutePath() + File.separator + ".tsuruignore");
                     List<String> ignoredFiles = new ArrayList<>();
