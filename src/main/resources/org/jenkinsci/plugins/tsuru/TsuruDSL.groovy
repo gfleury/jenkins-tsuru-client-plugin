@@ -7,11 +7,14 @@ import hudson.AbortException
 import hudson.EnvVars
 import hudson.FilePath
 import hudson.Util
+import hudson.model.Run
 import io.tsuru.client.api.TsuruApi
 import io.tsuru.client.model.LoginToken
 import org.jenkinsci.plugins.tsuru.pipeline.TsuruAction
 import org.jenkinsci.plugins.tsuru.pipeline.TsuruContextInit
 import org.jenkinsci.plugins.workflow.cps.EnvActionImpl
+
+import hudson.model.Job;
 
 import java.util.logging.Logger
 
@@ -25,28 +28,52 @@ class TsuruDSL implements Serializable {
 
     private transient Tsuru.DescriptorImpl config = new Tsuru.DescriptorImpl();
 
-    private transient TsuruApi apiInstance = null;
+    private transient static HashMap<String, TsuruApi> apiInstance = null;
+
+    private transient Job job;
 
     Boolean authenticated = false;
 
     public TsuruDSL(org.jenkinsci.plugins.workflow.cps.CpsScript script) {
         this.script = script;
+
+        if (this.apiInstance == null) {
+            this.apiInstance = new HashMap<String, TsuruApi>();
+        }
+
+        if (this.contexts == null) {
+            this.contexts = new HashMap<String, Context>();
+        }
+
+        Run<?, ?> build = script.$build();
+        if (build == null) {
+            throw new IllegalStateException("No associated build");
+        }
+        this.job = build.getParent();
     }
 
     public TsuruApi connect() {
-        apiInstance = new TsuruApi();
-        String apiUrl = currentContext.getServerUrl();
+        Context localCurrentContext = contexts.get(this.job.getFullName());
+        LOGGER.println("Running connect on -> " + localCurrentContext.getServerUrl());
+        LOGGER.println("Job Name -> " + this.job.getFullName());
+        TsuruApi localApiInstance = this.apiInstance.get(localCurrentContext.getServerUrl());
+        if (localApiInstance == null) {
+            localApiInstance = new TsuruApi();
+            this.apiInstance.put(localCurrentContext.getServerUrl(), localApiInstance);
+        }
+
+        String apiUrl = localCurrentContext.getServerUrl();
         if (apiUrl.endsWith("/")) {
             apiUrl = apiUrl.substring(0, apiUrl.length() - 1);
         }
-        apiInstance.getApiClient().setBasePath(apiUrl);
-        if (currentContext.getEmail() != null) {
-            LoginToken token = apiInstance.login(currentContext.getEmail(), currentContext.getPassword());
+        localApiInstance.getApiClient().setBasePath(apiUrl);
+        if (localCurrentContext.getEmail() != null) {
+            LoginToken token = localApiInstance.login(localCurrentContext.getEmail(), localCurrentContext.getPassword());
         } else {
-            apiInstance.getApiClient().addDefaultHeader("Authorization", "bearer " + currentContext.getToken());
+            localApiInstance.getApiClient().addDefaultHeader("Authorization", "bearer " + localCurrentContext.getToken());
         }
         authenticated = true;
-        return apiInstance;
+        return localApiInstance;
     }
 
     public Boolean deploy(String appName) {
@@ -138,8 +165,10 @@ class TsuruDSL implements Serializable {
     }
 
     private Boolean executeTsuruAction (TsuruAction.Action action, HashMap<String, String> Param) {
+        Context localCurrentContext = contexts.get(this.job.getFullName());
+        TsuruApi localApiInstance = this.apiInstance.get(localCurrentContext.getServerUrl());
         Map Args = [
-                apiInstance: this.apiInstance,
+                apiInstance: localApiInstance,
                 action: action,
                 Args: Param
         ]
@@ -148,6 +177,7 @@ class TsuruDSL implements Serializable {
     }
 
     private Context currentContext = null;
+    private HashMap<String, Context> contexts = null;
 
     enum ContextId implements Serializable{
         WITH_API("tsuru.withAPI"), WITH_APPLICATION("tsuru.withApplication")
@@ -308,11 +338,13 @@ class TsuruDSL implements Serializable {
     }
 
     public String application() {
-        return currentContext.getApplication();
+        Context localCurrentContext = contexts.get(this.job.getFullName());
+        return localCurrentContext.getApplication();
     }
 
     public String tsuruApi() {
-        return currentContext.getServerUrl();
+        Context localCurrentContext = contexts.get(this.job.getFullName());
+        return localCurrentContext.getServerUrl();
     }
 
     public <V> V withAPI(Object tname =null, Object tusername=null, Object tpassword=null, Closure<V> body) {
@@ -322,8 +354,8 @@ class TsuruDSL implements Serializable {
         String password = toSingleString(tpassword);
 
         node {
-
-            dieIfWithin(ContextId.WITH_API, currentContext, ContextId.WITH_APPLICATION)
+            // TODO: Check why it's failing hard.
+            //dieIfWithin(ContextId.WITH_API, currentContext, ContextId.WITH_APPLICATION)
 
             Context context = new Context(null, ContextId.WITH_API);
 
@@ -345,6 +377,8 @@ class TsuruDSL implements Serializable {
                 context.setEmail(username);
                 context.setPassword(password);
             }
+
+            contexts.put(this.job.getFullName(), context);
 
             context.run {
                 body()
