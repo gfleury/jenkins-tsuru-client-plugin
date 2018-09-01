@@ -265,7 +265,7 @@ public class TsuruAction extends AbstractStepImpl {
                                     getListener().getLogger().println("[app-deploy] No deployment was found!");
                                     break;
                                 }
-                                Thread.sleep(5000 + (counter + 500));
+                                Thread.sleep(5000 + (counter * 500));
                                 counter++;
                             } while (counter < 20);
                         } else {
