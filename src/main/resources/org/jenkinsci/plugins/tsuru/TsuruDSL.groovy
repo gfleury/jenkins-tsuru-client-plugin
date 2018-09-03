@@ -167,11 +167,13 @@ class TsuruDSL implements Serializable {
     private Boolean executeTsuruAction (TsuruAction.Action action, HashMap<String, String> Param) {
         Context localCurrentContext = contexts.get(this.job.getFullName());
         TsuruApi localApiInstance = this.apiInstance.get(localCurrentContext.getServerUrl());
-        Map Args = [
+        def Args = HashMap.newInstance();
+        Args.putAll([
                 apiInstance: localApiInstance,
                 action: action,
                 Args: Param
-        ]
+        ]);
+
         TsuruAction.Execution result = script._TsuruAction(Args);
         return result.result;
     }
