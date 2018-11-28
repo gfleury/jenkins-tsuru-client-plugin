@@ -5,8 +5,9 @@ import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.apache.commons.io.IOUtils;
 
 import java.io.*;
-import java.util.ArrayList;
-import java.util.Collection;
+import java.nio.file.*;
+import java.nio.file.attribute.*;
+import java.util.*;
 import java.util.zip.GZIPOutputStream;
 
 /*
@@ -49,9 +50,9 @@ public class TarGzip {
         TarArchiveOutputStream taos = new TarArchiveOutputStream(
                 new GZIPOutputStream(new BufferedOutputStream(fos)));
         // TAR has an 8 gig file limit by default, this gets around that
-        taos.setBigNumberMode(TarArchiveOutputStream.BIGNUMBER_STAR); // to get past the 8 gig limit
+        taos.setBigNumberMode(TarArchiveOutputStream.BIGNUMBER_POSIX); // to get past the 8 gig limit
         // TAR originally didn't support long file names, so enable the support for it
-        taos.setLongFileMode(TarArchiveOutputStream.LONGFILE_GNU);
+        taos.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
 
         // Get to putting all the files in the compressed output file
         for (File f : files) {
@@ -78,7 +79,11 @@ public class TarGzip {
             throws IOException
     {
         // Create an entry for the file
-        taos.putArchiveEntry(new TarArchiveEntry(file, dir + File.separator + file.getName()));
+        TarArchiveEntry tarFileEntry = new TarArchiveEntry(file, dir + File.separator + file.getName());
+
+        tarFileEntry.setMode(posixPermissions(file));
+
+        taos.putArchiveEntry(tarFileEntry);
         if (file.isFile()) {
             // Add the file to the archive
             BufferedInputStream bis = new BufferedInputStream(new FileInputStream(file));
@@ -94,5 +99,38 @@ public class TarGzip {
                 addFilesToCompression(taos, childFile, dir + File.separator + file.getName());
             }
         }
+    }
+
+    // https://raw.githubusercontent.com/kamranzafar/jtar/master/src/main/java/org/kamranzafar/jtar/PermissionUtils.java
+
+    private static Map<PosixFilePermission, Integer> posixPermissionToInteger = new HashMap<>();
+
+    static {
+        posixPermissionToInteger.put(PosixFilePermission.OWNER_EXECUTE, 0100);
+        posixPermissionToInteger.put(PosixFilePermission.OWNER_WRITE, 0200);
+        posixPermissionToInteger.put(PosixFilePermission.OWNER_READ, 0400);
+
+        posixPermissionToInteger.put(PosixFilePermission.GROUP_EXECUTE, 0010);
+        posixPermissionToInteger.put(PosixFilePermission.GROUP_WRITE, 0020);
+        posixPermissionToInteger.put(PosixFilePermission.GROUP_READ, 0040);
+
+        posixPermissionToInteger.put(PosixFilePermission.OTHERS_EXECUTE, 0001);
+        posixPermissionToInteger.put(PosixFilePermission.OTHERS_WRITE, 0002);
+        posixPermissionToInteger.put(PosixFilePermission.OTHERS_READ, 0004);
+    }
+
+    private static int posixPermissions(File f) {
+        int number = 0;
+        try {
+            Set<PosixFilePermission> permissions = Files.getPosixFilePermissions(f.toPath());
+            for (Map.Entry<PosixFilePermission, Integer> entry : posixPermissionToInteger.entrySet()) {
+                if (permissions.contains(entry.getKey())) {
+                    number += entry.getValue();
+                }
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return number;
     }
 }

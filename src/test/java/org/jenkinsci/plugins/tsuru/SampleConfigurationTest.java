@@ -3,10 +3,13 @@ package org.jenkinsci.plugins.tsuru;
 import com.gargoylesoftware.htmlunit.html.HtmlForm;
 import com.gargoylesoftware.htmlunit.html.HtmlTextInput;
 import org.jenkinsci.plugins.tsuru.pipeline.TsuruGlobalVariable;
+import org.jenkinsci.plugins.tsuru.utils.TarGzip;
 import org.junit.Test;
 import static org.junit.Assert.*;
 import org.junit.Rule;
 import org.jvnet.hudson.test.RestartableJenkinsRule;
+
+import java.io.File;
 
 public class SampleConfigurationTest {
 
@@ -32,4 +35,13 @@ public class SampleConfigurationTest {
         });
     }*/
 
+    @Test
+    public void targzFiles() throws Exception {
+        File deploymentFile = File.createTempFile("deploymentFile", ".tgz");
+
+        TarGzip.compressFile(new File("./a"), deploymentFile);
+
+        System.out.println(deploymentFile);
+
+    }
 }
