@@ -2,6 +2,7 @@ package org.jenkinsci.plugins.tsuru.utils;
 
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
+import org.apache.commons.compress.archivers.tar.TarConstants;
 import org.apache.commons.io.IOUtils;
 
 import java.io.*;
@@ -78,20 +79,31 @@ public class TarGzip {
     private static void addFilesToCompression(TarArchiveOutputStream taos, File file, String dir)
             throws IOException
     {
-        // Create an entry for the file
-        TarArchiveEntry tarFileEntry = new TarArchiveEntry(file, dir + File.separator + file.getName());
-
-        tarFileEntry.setMode(posixPermissions(file));
-
-        taos.putArchiveEntry(tarFileEntry);
         if (file.isFile()) {
+            // Create an entry for the file
+            TarArchiveEntry tarFileEntry = new TarArchiveEntry(file, dir + File.separator + file.getName());
+            tarFileEntry.setMode(posixPermissions(file));
+            taos.putArchiveEntry(tarFileEntry);
             // Add the file to the archive
             BufferedInputStream bis = new BufferedInputStream(new FileInputStream(file));
             IOUtils.copy(bis, taos);
             taos.closeArchiveEntry();
             bis.close();
         }
+        else if (Files.isSymbolicLink(file.toPath())) {
+            // Create an entry for the file
+            TarArchiveEntry tarFileEntry = new TarArchiveEntry(dir + File.separator + file.getName(), TarConstants.LF_SYMLINK);
+            tarFileEntry.setMode(posixPermissions(file));
+            tarFileEntry.setLinkName(Files.readSymbolicLink(file.toPath()).toString());
+            taos.putArchiveEntry(tarFileEntry);
+            // Just close it if it is a symlink
+            taos.closeArchiveEntry();
+        }
         else if (file.isDirectory()) {
+            // Create an entry for the file
+            TarArchiveEntry tarFileEntry = new TarArchiveEntry(file, dir + File.separator + file.getName());
+            tarFileEntry.setMode(posixPermissions(file));
+            taos.putArchiveEntry(tarFileEntry);
             // close the archive entry
             taos.closeArchiveEntry();
             // go through all the files in the directory and using recursion, add them to the archive
@@ -122,7 +134,7 @@ public class TarGzip {
     private static int posixPermissions(File f) {
         int number = 0;
         try {
-            Set<PosixFilePermission> permissions = Files.getPosixFilePermissions(f.toPath());
+            Set<PosixFilePermission> permissions = Files.getPosixFilePermissions(f.toPath(), LinkOption.NOFOLLOW_LINKS);
             for (Map.Entry<PosixFilePermission, Integer> entry : posixPermissionToInteger.entrySet()) {
                 if (permissions.contains(entry.getKey())) {
                     number += entry.getValue();
