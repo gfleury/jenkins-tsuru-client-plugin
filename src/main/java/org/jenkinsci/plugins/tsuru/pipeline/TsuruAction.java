@@ -267,7 +267,7 @@ public class TsuruAction extends AbstractStepImpl {
                                 }
                                 Thread.sleep(5000 + (counter * 500));
                                 counter++;
-                            } while (counter < 20);
+                            } while (counter < 80);
                         } else {
                             // TODO: Better handling on unauthorized and conflict (another deployment in course)
                             throw e;
