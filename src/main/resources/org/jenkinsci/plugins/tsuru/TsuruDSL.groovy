@@ -34,6 +34,8 @@ class TsuruDSL implements Serializable {
 
     Boolean authenticated = false;
 
+    String loginToken;
+
     public TsuruDSL(org.jenkinsci.plugins.workflow.cps.CpsScript script) {
         this.script = script;
 
@@ -69,6 +71,7 @@ class TsuruDSL implements Serializable {
         localApiInstance.getApiClient().setBasePath(apiUrl);
         if (localCurrentContext.getEmail() != null) {
             LoginToken token = localApiInstance.login(localCurrentContext.getEmail(), localCurrentContext.getPassword());
+            loginToken = token.getToken();
         } else {
             localApiInstance.getApiClient().addDefaultHeader("Authorization", "bearer " + localCurrentContext.getToken());
         }
@@ -162,6 +165,10 @@ class TsuruDSL implements Serializable {
         Param.put("newAppName", newAppName);
 
         return executeTsuruAction(TsuruAction.Action.APP_CLONE, Param);
+    }
+
+    public String GetAuthToken() {
+        return loginToken;
     }
 
     private Boolean executeTsuruAction (TsuruAction.Action action, HashMap<String, String> Param) {
