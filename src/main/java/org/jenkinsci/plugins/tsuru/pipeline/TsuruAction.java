@@ -6,10 +6,13 @@ import hudson.FilePath;
 import hudson.Launcher;
 import hudson.model.Run;
 import hudson.model.TaskListener;
+import io.tsuru.client.ApiClient;
 import io.tsuru.client.ApiException;
 import io.tsuru.client.api.TsuruApi;
+import io.tsuru.client.auth.Authentication;
 import io.tsuru.client.model.Application;
 import io.tsuru.client.model.Deployments;
+import jenkins.security.MasterToSlaveCallable;
 import org.jenkinsci.plugins.tsuru.utils.TarGzip;
 import org.jenkinsci.plugins.workflow.cps.EnvActionImpl;
 import org.jenkinsci.plugins.workflow.steps.*;
@@ -49,7 +52,8 @@ public class TsuruAction extends Step implements Serializable {
         this.Args = Args;
     }
 
-    @Override public StepExecution start(StepContext context) throws Exception {
+    @Override
+    public StepExecution start(StepContext context) throws Exception {
         return new Execution(this, context);
     }
 
@@ -130,8 +134,7 @@ public class TsuruAction extends Step implements Serializable {
                 public void run() {
                     try {
                         tsuruPerform();
-                    }
-                    catch (Exception e) {
+                    } catch (Exception e) {
                         Execution.this.getContext().onFailure(e);
                     }
                 }
@@ -143,101 +146,135 @@ public class TsuruAction extends Step implements Serializable {
         private void tsuruPerform() throws Exception {
             FilePath workspace = getContext().get(FilePath.class);
             TaskListener listener = getContext().get(TaskListener.class);
+            Launcher launcher = getContext().get(Launcher.class);
+            String output = "";
 
             switch (step.action) {
                 case DEPLOY:
-                    // Create temp deployment file
-                    File deploymentFile = File.createTempFile("deploymentFile", ".tgz");
-                    deploymentFile.deleteOnExit();
-                    listener.getLogger().println("[app-deploy] Deploying file " + deploymentFile);
-                    listener.getLogger().println("[app-deploy] Directory: " + workspace);
+                    class RunDeployOnNode extends MasterToSlaveCallable<Void, Exception> {
+                        private static final long serialVersionUID = 1L;
+                        private final TsuruAction step;
 
-                    File fileDir = new File(workspace + "/");
+                        private String basePath;
 
-                    ArrayList<File> fileList;
+                        private String authorization;
 
-                    if (fileDir != null) {
-                        fileList = new ArrayList<File>(fileDir.listFiles().length);
-                    } else {
-                        throw new IOException("Failed to enumerate files from: " + workspace + "/");
-                    }
+                        public RunDeployOnNode(TsuruAction step) {
+                            this.step = step;
 
-                    File tsuruIgnore = new File(fileDir.getAbsolutePath() + File.separator + ".tsuruignore");
-                    List<String> ignoredFiles = new ArrayList<>();
-
-                    try {
-                        if (tsuruIgnore.exists()) {
-                            ignoredFiles = Files.readAllLines(tsuruIgnore.toPath());
-                            listener.getLogger().println("[app-deploy] Ignoring files on deployment: " + ignoredFiles);
+                            this.basePath = step.apiInstance.getApiClient().getBasePath();
+                            this.authorization = step.apiInstance.getApiClient().getDefaultHeaders().get("Authorization");
                         }
-                    } catch (Exception e) {
-                    }
 
-                    for (File childFile : fileDir.listFiles()) {
-                        Boolean ignoreFile = false;
-                        for (String k: ignoredFiles) {
-                            if (k.equals(childFile.getName())) {
-                                ignoreFile = true;
-                                continue;
+                        @Override
+                        public Void call() throws Exception {
+                            this.step.apiInstance = new TsuruApi();
+                            this.step.apiInstance.getApiClient().setBasePath(basePath);
+                            this.step.apiInstance.getApiClient().addDefaultHeader("Authorization", this.authorization);
+
+                            // Create temp deployment file
+                            File deploymentFile = File.createTempFile("deploymentFile", ".tgz");
+                            deploymentFile.deleteOnExit();
+                            listener.getLogger().println("[app-deploy] Deploying file " + deploymentFile);
+                            listener.getLogger().println("[app-deploy] Directory: " + workspace);
+
+                            File fileDir = new File(workspace + "/");
+
+                            ArrayList<File> fileList;
+
+                            if (fileDir != null) {
+                                fileList = new ArrayList<File>(fileDir.listFiles().length);
+                            } else {
+                                throw new IOException("Failed to enumerate files from: " + workspace + "/");
                             }
-                        }
-                        if (!ignoreFile)
-                            fileList.add(childFile);
-                    }
 
-                    TarGzip.compressFiles(fileList, deploymentFile);
+                            File tsuruIgnore = new File(fileDir.getAbsolutePath() + File.separator + ".tsuruignore");
+                            List<String> ignoredFiles = new ArrayList<>();
 
-                    listener.getLogger().println("[app-deploy] Starting Tsuru application deployment ========>");
-                    int timeout = step.apiInstance.getApiClient().getReadTimeout();
-                    step.apiInstance.getApiClient().setReadTimeout(600000); // Same BuildTimeout than TSURU
-                    String output = "";
-                    try {
-                        output = step.apiInstance.appDeploy(step.Args.get("appName"), deploymentFile, step.Args.get("imageTag"), step.Args.get("message"), step.Args.get("commit"));
-                    } catch (io.tsuru.client.ApiException e) {
-                        if (e.getCause() instanceof java.io.IOException) {
-                            int counter = 0;
-                            String id = "";
-                            listener.getLogger().println("[app-deploy] Logs will be truncated, please check the logs directly on Tsuru!");
-                            do {
-                                List<Deployments> deploys = step.apiInstance.appDeployList(step.Args.get("appName"), 1);
-                                if (deploys.size() > 0) {
-                                    Deployments deployment = deploys.get(0);
-                                    if (id.length() == 0) {
-                                        id = deployment.getId();
-                                    } else if (!id.contains(deployment.getId())) {
-                                        listener.getLogger().println("[app-deploy] Another deployment started in the meanwhile! Aborting this one!");
-                                        break;
-                                    }
-                                    if (!deployment.getDuration().startsWith("-") && (deployment.getImage().length() != 0 || deployment.getError().length() != 0)) {
-                                        output = step.apiInstance.appLog(step.Args.get("appName"), 20);
-                                        if (deployment.getImage().length() != 0) {
-                                            output += "\nOK\n";
-                                        }
-                                        break;
-                                    }
-                                } else {
-                                    // No deployments at all
-                                    listener.getLogger().println("[app-deploy] No deployment was found!");
-                                    break;
+                            try {
+                                if (tsuruIgnore.exists()) {
+                                    ignoredFiles = Files.readAllLines(tsuruIgnore.toPath());
+                                    listener.getLogger().println("[app-deploy] Ignoring files on deployment: " + ignoredFiles);
                                 }
-                                Thread.sleep(5000 + (counter * 500));
-                                counter++;
-                            } while (counter < 80);
-                        } else {
-                            // TODO: Better handling on unauthorized and conflict (another deployment in course)
-                            throw e;
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+
+                            for (File childFile : fileDir.listFiles()) {
+                                Boolean ignoreFile = false;
+                                for (String k : ignoredFiles) {
+                                    if (k.equals(childFile.getName())) {
+                                        ignoreFile = true;
+                                        continue;
+                                    }
+                                }
+                                if (!ignoreFile)
+                                    fileList.add(childFile);
+                            }
+
+                            TarGzip.compressFiles(fileList, deploymentFile);
+
+                            listener.getLogger().println("[app-deploy] Starting Tsuru application deployment ========>");
+                            listener.getLogger().flush();
+
+                            int timeout = this.step.apiInstance.getApiClient().getReadTimeout();
+                            this.step.apiInstance.getApiClient().setReadTimeout(600000); // Same BuildTimeout than TSURU
+                            String output = "";
+
+                            try {
+                                output = this.step.apiInstance.appDeploy(this.step.Args.get("appName"), deploymentFile, this.step.Args.get("imageTag"), this.step.Args.get("message"), this.step.Args.get("commit"));
+                            } catch (io.tsuru.client.ApiException e) {
+
+                                    if (e.getCause() instanceof java.io.IOException) {
+                                        int counter = 0;
+                                        String id = "";
+                                        listener.getLogger().println("[app-deploy] Logs will be truncated, please check the logs directly on Tsuru!");
+                                        do {
+                                            List<Deployments> deploys = step.apiInstance.appDeployList(step.Args.get("appName"), 1);
+                                            if (deploys.size() > 0) {
+                                                Deployments deployment = deploys.get(0);
+                                                if (id.length() == 0) {
+                                                    id = deployment.getId();
+                                                } else if (!id.contains(deployment.getId())) {
+                                                    listener.getLogger().println("[app-deploy] Another deployment started in the meanwhile! Aborting this one!");
+                                                    break;
+                                                }
+                                                if (!deployment.getDuration().startsWith("-") && (deployment.getImage().length() != 0 || deployment.getError().length() != 0)) {
+                                                    output = step.apiInstance.appLog(step.Args.get("appName"), 20);
+                                                    if (deployment.getImage().length() != 0) {
+                                                        output += "\nOK\n";
+                                                    }
+                                                    break;
+                                                }
+                                            } else {
+                                                // No deployments at all
+                                                listener.getLogger().println("[app-deploy] No deployment was found!");
+                                                break;
+                                            }
+                                            Thread.sleep(5000 + (counter * 500));
+                                            counter++;
+                                        } while (counter < 80);
+                                    } else {
+                                        // TODO: Better handling on unauthorized and conflict (another deployment in course)
+                                        throw e;
+                                    }
+
+                            } finally {
+                                listener.getLogger().println(output);
+                                step.apiInstance.getApiClient().setReadTimeout(timeout);
+                            }
+
+                            if (!output.endsWith("OK\n")) {
+                                throw new ApiException("[app-deploy] Tsuru deployment FAILED ˆˆˆˆˆˆˆˆˆ");
+                            }
+                            listener.getLogger().println("[app-deploy] Finishing Tsuru application deployment =======>");
+                            listener.getLogger().flush();
+                            setResult(true);
+                            return null;
                         }
-                    } finally {
-                        listener.getLogger().println(output);
-                        step.apiInstance.getApiClient().setReadTimeout(timeout);
-                    }
-                    if (!output.endsWith("OK\n")) {
-                        throw new ApiException("[app-deploy] Tsuru deployment FAILED ˆˆˆˆˆˆˆˆˆ");
                     }
 
-                    listener.getLogger().println("[app-deploy] Finishing Tsuru application deployment =======>");
-                    listener.getLogger().flush();
-                    setResult(true);
+                    launcher.getChannel().call(new RunDeployOnNode(step));
                     break;
                 case ROLLBACK:
                     listener.getLogger().println("[app-deploy-rollback] Starting Tsuru application deployment rollback ========>");
@@ -252,25 +289,52 @@ public class TsuruAction extends Step implements Serializable {
                     setResult(true);
                     break;
                 case BUILD:
-                    // Create temp deployment file for building Image
-                    deploymentFile = File.createTempFile("deploymentFile", ".tgz");
-                    deploymentFile.deleteOnExit();
-                    System.out.println("Building image from deployment file " + deploymentFile);
-                    System.out.println("Directory: " + workspace);
 
-                    TarGzip.compressFile(new File(workspace.getRemote()), deploymentFile);
+                    class RunBuildOnNode extends MasterToSlaveCallable<Void, Exception> {
+                        private static final long serialVersionUID = 1L;
+                        private final TsuruAction step;
 
-                    listener.getLogger().println("[app-build] Starting Tsuru application building ========>");
-                    output = step.apiInstance.appBuild(step.Args.get("appName"), step.Args.get("imageTag"), deploymentFile);
-                    listener.getLogger().println(output);
-                    if (!output.endsWith("OK")) {
-                        throw new ApiException("[app-build] Tsuru building FAILED ˆˆˆˆˆˆˆˆˆ");
+                        private String basePath;
+
+                        private String authorization;
+
+                        public RunBuildOnNode(TsuruAction step) {
+                            this.step = step;
+
+                            this.basePath = step.apiInstance.getApiClient().getBasePath();
+                            this.authorization = step.apiInstance.getApiClient().getDefaultHeaders().get("Authorization");
+                        }
+
+                        @Override
+                        public Void call() throws Exception {
+                            this.step.apiInstance = new TsuruApi();
+                            this.step.apiInstance.getApiClient().setBasePath(basePath);
+                            this.step.apiInstance.getApiClient().addDefaultHeader("Authorization", this.authorization);
+
+                            // Create temp deployment file for building Image
+                            File deploymentFile = File.createTempFile("deploymentFile", ".tgz");
+                            deploymentFile.deleteOnExit();
+                            System.out.println("Building image from deployment file " + deploymentFile);
+                            System.out.println("Directory: " + workspace);
+
+                            TarGzip.compressFile(new File(workspace.getRemote()), deploymentFile);
+
+                            listener.getLogger().println("[app-build] Starting Tsuru application building ========>");
+                            String output = step.apiInstance.appBuild(step.Args.get("appName"), step.Args.get("imageTag"), deploymentFile);
+                            listener.getLogger().println(output);
+                            if (!output.endsWith("OK")) {
+                                throw new ApiException("[app-build] Tsuru building FAILED ˆˆˆˆˆˆˆˆˆ");
+                            }
+
+                            listener.getLogger().println("[app-build] Finishing Tsuru application build =======>");
+                            listener.getLogger().println("[app-build] Image available under TAG: " + step.Args.get("imageTag"));
+                            listener.getLogger().flush();
+                            setResult(true);
+                            return null;
+                        }
                     }
 
-                    listener.getLogger().println("[app-build] Finishing Tsuru application build =======>");
-                    listener.getLogger().println("[app-build] Image available under TAG: " + step.Args.get("imageTag"));
-                    listener.getLogger().flush();
-                    setResult(true);
+                    launcher.getChannel().call(new RunBuildOnNode(step));
                     break;
                 case ENV_SET:
                     listener.getLogger().println("[env-set] Setting environment variable ========>");
@@ -286,8 +350,8 @@ public class TsuruAction extends Step implements Serializable {
                 case APP_CREATE:
                     listener.getLogger().println("[app-create] Creating application on Tsuru ========>");
                     String[] routerOpts = step.Args.get("routerOpts").split(",");
-                    HashMap<String,String> routerOptsMap = new HashMap<>();
-                    for (String routerOpt: routerOpts) {
+                    HashMap<String, String> routerOptsMap = new HashMap<>();
+                    for (String routerOpt : routerOpts) {
                         kv = routerOpt.split("=");
                         if (kv.length > 1) {
                             routerOptsMap.put(kv[0], kv[1]);
