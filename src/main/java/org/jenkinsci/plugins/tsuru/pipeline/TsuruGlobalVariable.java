@@ -24,7 +24,7 @@ public class TsuruGlobalVariable extends GlobalVariable {
     @Override
     public Object getValue(@Nonnull CpsScript script) throws Exception {
         Binding binding = script.getBinding();
-        script.println();
+//        script.println();
         Object tsuru;
         if (binding.hasVariable(getName())) {
             tsuru = binding.getVariable(getName());

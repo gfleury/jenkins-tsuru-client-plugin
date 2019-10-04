@@ -339,8 +339,15 @@ public class TsuruAction extends Step implements Serializable {
                 case ENV_SET:
                     listener.getLogger().println("[env-set] Setting environment variable ========>");
                     String[] kv = step.Args.get("env").split("=");
-                    io.tsuru.client.model.EnvVars envVar = new io.tsuru.client.model.EnvVars(kv[0], kv[1]);
-                    output = step.apiInstance.envSet(step.Args.get("appName"), Arrays.asList(envVar), Boolean.getBoolean(step.Args.get("restartApp")), Boolean.getBoolean(step.Args.get("private")));
+                    String[] v = Arrays.copyOfRange(kv, 1, kv.length);
+                    String vJoined = String.join("=", v);
+
+                    io.tsuru.client.model.EnvVars envVar = new io.tsuru.client.model.EnvVars(kv[0], vJoined);
+                    String NoRestartString = step.Args.get("restartApp");
+                    Boolean NoRestart = Boolean.valueOf(NoRestartString);
+                    String IsPrivateString = step.Args.get("private");
+                    Boolean IsPrivate = Boolean.valueOf(IsPrivateString);
+                    output = step.apiInstance.envSet(step.Args.get("appName"), Arrays.asList(envVar), NoRestart, IsPrivate);
                     listener.getLogger().println(output);
 
                     listener.getLogger().println("[env-set] Environment variable setted =======>");
