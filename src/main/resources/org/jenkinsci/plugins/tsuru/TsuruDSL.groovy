@@ -122,6 +122,15 @@ class TsuruDSL implements Serializable {
         return executeTsuruAction(TsuruAction.Action.ENV_SET, Param);
     }
 
+    public Boolean getEnv(String appName, String env, String result) {
+        HashMap<String, String> Param = new HashMap<String, String>();
+        appName = appName.toLowerCase();
+        Param.put("appName", appName);
+        Param.put("env", env);
+        Param.put("result", result);
+        return executeTsuruAction(TsuruAction.Action.ENV_GET, Param);
+    }
+
     public Boolean create(String appName, String platform, String appDescription) {
         return create(appName, platform, null, null, null, appDescription, null, null, "");
     }

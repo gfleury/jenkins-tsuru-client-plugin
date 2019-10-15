@@ -85,4 +85,20 @@ public class SampleConfigurationTest {
         j.assertBuildStatus(Result.FAILURE, p.scheduleBuild2(0));
     }
 
+    @Test
+    public void checkGetEnv() throws Exception {
+        DumbSlave slave = j.createSlave("slave", null, null);
+        FreeStyleProject f = j.createFreeStyleProject("f"); // the control
+        f.setAssignedNode(slave);
+        WorkflowJob p = j.jenkins.createProject(WorkflowJob.class, "p");
+        FilePath ws;
+
+        while ((ws = slave.getWorkspaceFor(p)) == null) {
+            Thread.sleep(100);
+        }
+        p.setDefinition(new CpsFlowDefinition("tsuru.withAPI('localhost', 'george', 'test123') { tsuru.connect(); String a; tsuru.getEnv('teste', 'teste', a); }", false));
+
+        j.assertBuildStatus(Result.FAILURE, p.scheduleBuild2(0));
+    }
+
 }

@@ -231,6 +231,11 @@ public class TsuruAction extends Step implements Serializable {
                                         listener.getLogger().println("[app-deploy] Logs will be truncated, please check the logs directly on Tsuru!");
                                         do {
                                             List<Deployments> deploys = step.apiInstance.appDeployList(step.Args.get("appName"), 1);
+                                            if (deploys == null) {
+                                                Thread.sleep(5000 + (counter * 500));
+                                                counter++;
+                                                continue;
+                                            }
                                             if (deploys.size() > 0) {
                                                 Deployments deployment = deploys.get(0);
                                                 if (id.length() == 0) {
@@ -351,6 +356,18 @@ public class TsuruAction extends Step implements Serializable {
                     listener.getLogger().println(output);
 
                     listener.getLogger().println("[env-set] Environment variable setted =======>");
+                    listener.getLogger().flush();
+                    setResult(true);
+                    break;
+                case ENV_GET:
+                    listener.getLogger().println("[env-get] Getting environment variable ========>");
+                    io.tsuru.client.model.EnvVars[] getEnvVars = step.apiInstance.envGet(step.Args.get("appName"), step.Args.get("env"));
+                    String result = step.Args.get("result");
+                    for (io.tsuru.client.model.EnvVars e : getEnvVars) {
+                        String.format("%s%s=%s\n", result, e.getName(), e.getValue());
+                    }
+
+                    listener.getLogger().println("[env-set] Environment variable got =======>");
                     listener.getLogger().flush();
                     setResult(true);
                     break;
