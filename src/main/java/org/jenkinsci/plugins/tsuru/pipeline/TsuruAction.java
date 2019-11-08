@@ -20,6 +20,7 @@ import org.kohsuke.stapler.DataBoundConstructor;
 
 import javax.inject.Inject;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.file.Files;
@@ -34,7 +35,7 @@ public class TsuruAction extends Step implements Serializable {
     public enum Action {
         DEPLOY, ROLLBACK, BUILD,
         APP_CREATE, APP_REMOVE, APP_CLONE,
-        ENV_SET, ENV_GET,
+        ENV_SET, ENV_GET, LOAD_ENVFILE
     }
 
     public static final String FUNCTION_NAME = "_TsuruAction";
@@ -371,6 +372,30 @@ public class TsuruAction extends Step implements Serializable {
                     listener.getLogger().flush();
                     setResult(true);
                     break;
+                case LOAD_ENVFILE:
+                    listener.getLogger().println("[load-env-file] Loading environment file variables ========>");
+                    String envfile = step.Args.get("envfile");
+                    Properties props = new Properties();
+                    try (FileInputStream in = new FileInputStream(workspace.getRemote() + "/" + envfile)) {
+                        props.load(in);
+                    }
+
+                    Enumeration<String> enums = (Enumeration<String>) props.propertyNames();
+                    List<io.tsuru.client.model.EnvVars> envVarsFromFile = new ArrayList<io.tsuru.client.model.EnvVars>();
+
+                    while (enums.hasMoreElements()) {
+                        String key = enums.nextElement();
+                        String value = props.getProperty(key);
+
+                        envVarsFromFile.add(new io.tsuru.client.model.EnvVars(key, value));
+                    }
+                    output = step.apiInstance.envSet(step.Args.get("appName"), envVarsFromFile, true, false);
+                    listener.getLogger().println(output);
+
+                    listener.getLogger().println("[load-env-file] Environment variables setted =======>");
+                    listener.getLogger().flush();
+                    setResult(true);
+
                 case APP_CREATE:
                     listener.getLogger().println("[app-create] Creating application on Tsuru ========>");
                     String[] routerOpts = step.Args.get("routerOpts").split(",");

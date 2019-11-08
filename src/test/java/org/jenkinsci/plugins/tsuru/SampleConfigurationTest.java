@@ -23,6 +23,9 @@ import org.jvnet.hudson.test.LoggerRule;
 import org.jvnet.hudson.test.RestartableJenkinsRule;
 
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 public class SampleConfigurationTest {
 
@@ -74,7 +77,7 @@ public class SampleConfigurationTest {
         DumbSlave slave = j.createSlave("slave", null, null);
         FreeStyleProject f = j.createFreeStyleProject("f"); // the control
         f.setAssignedNode(slave);
-        WorkflowJob p = j.jenkins.createProject(WorkflowJob.class, "p");
+        WorkflowJob p = j.jenkins.createProject(WorkflowJob.class, "setEnvTest");
         FilePath ws;
 
         while ((ws = slave.getWorkspaceFor(p)) == null) {
@@ -90,7 +93,7 @@ public class SampleConfigurationTest {
         DumbSlave slave = j.createSlave("slave", null, null);
         FreeStyleProject f = j.createFreeStyleProject("f"); // the control
         f.setAssignedNode(slave);
-        WorkflowJob p = j.jenkins.createProject(WorkflowJob.class, "p");
+        WorkflowJob p = j.jenkins.createProject(WorkflowJob.class, "getEnvTest");
         FilePath ws;
 
         while ((ws = slave.getWorkspaceFor(p)) == null) {
@@ -101,4 +104,26 @@ public class SampleConfigurationTest {
         j.assertBuildStatus(Result.FAILURE, p.scheduleBuild2(0));
     }
 
+    @Test
+    public void checkloadEnvFile() throws Exception {
+        DumbSlave slave = j.createSlave("slave", null, null);
+        FreeStyleProject f = j.createFreeStyleProject("f"); // the control
+        f.setAssignedNode(slave);
+        WorkflowJob p = j.jenkins.createProject(WorkflowJob.class, "loadEnvFileTest");
+        FilePath ws;
+
+        while ((ws = slave.getWorkspaceFor(p)) == null) {
+            Thread.sleep(100);
+        }
+
+        // Create mock envfile
+        Path path = Paths.get(ws.getRemote() + "/" + "envFileExample.env");
+        Files.createDirectories(path.getParent());
+
+        Files.write(path, Files.readAllBytes(Paths.get("src/test/resources/config.env")));
+
+        p.setDefinition(new CpsFlowDefinition("tsuru.withAPI('localhost') { tsuru.connect(); tsuru.loadEnvFile('salve', 'envFileExample.env'); }", false));
+
+        j.assertBuildStatus(Result.FAILURE, p.scheduleBuild2(0));
+    }
 }
