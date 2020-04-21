@@ -173,47 +173,52 @@ public class TsuruAction extends Step implements Serializable {
                             this.step.apiInstance.getApiClient().setBasePath(basePath);
                             this.step.apiInstance.getApiClient().addDefaultHeader("Authorization", this.authorization);
 
-                            // Create temp deployment file
-                            File deploymentFile = File.createTempFile("deploymentFile", ".tgz");
-                            deploymentFile.deleteOnExit();
-                            listener.getLogger().println("[app-deploy] Deploying file " + deploymentFile);
-                            listener.getLogger().println("[app-deploy] Directory: " + workspace);
+                            File deploymentFile = null;
 
-                            File fileDir = new File(workspace + "/");
+                            if (this.step.Args.get("imageTag") == null || this.step.Args.get("imageTag").isEmpty()) {
+                                // Create temp deployment file
 
-                            ArrayList<File> fileList;
+                                deploymentFile = File.createTempFile("deploymentFile", ".tgz");
+                                deploymentFile.deleteOnExit();
+                                listener.getLogger().println("[app-deploy] Deploying file " + deploymentFile);
+                                listener.getLogger().println("[app-deploy] Directory: " + workspace);
 
-                            if (fileDir != null) {
-                                fileList = new ArrayList<File>(fileDir.listFiles().length);
-                            } else {
-                                throw new IOException("Failed to enumerate files from: " + workspace + "/");
-                            }
+                                File fileDir = new File(workspace + "/");
 
-                            File tsuruIgnore = new File(fileDir.getAbsolutePath() + File.separator + ".tsuruignore");
-                            List<String> ignoredFiles = new ArrayList<>();
+                                ArrayList<File> fileList;
 
-                            try {
-                                if (tsuruIgnore.exists()) {
-                                    ignoredFiles = Files.readAllLines(tsuruIgnore.toPath());
-                                    listener.getLogger().println("[app-deploy] Ignoring files on deployment: " + ignoredFiles);
+                                if (fileDir != null) {
+                                    fileList = new ArrayList<File>(fileDir.listFiles().length);
+                                } else {
+                                    throw new IOException("Failed to enumerate files from: " + workspace + "/");
                                 }
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            }
 
-                            for (File childFile : fileDir.listFiles()) {
-                                Boolean ignoreFile = false;
-                                for (String k : ignoredFiles) {
-                                    if (k.equals(childFile.getName())) {
-                                        ignoreFile = true;
-                                        continue;
+                                File tsuruIgnore = new File(fileDir.getAbsolutePath() + File.separator + ".tsuruignore");
+                                List<String> ignoredFiles = new ArrayList<>();
+
+                                try {
+                                    if (tsuruIgnore.exists()) {
+                                        ignoredFiles = Files.readAllLines(tsuruIgnore.toPath());
+                                        listener.getLogger().println("[app-deploy] Ignoring files on deployment: " + ignoredFiles);
                                     }
+                                } catch (Exception e) {
+                                    e.printStackTrace();
                                 }
-                                if (!ignoreFile)
-                                    fileList.add(childFile);
-                            }
 
-                            TarGzip.compressFiles(fileList, deploymentFile);
+                                for (File childFile : fileDir.listFiles()) {
+                                    Boolean ignoreFile = false;
+                                    for (String k : ignoredFiles) {
+                                        if (k.equals(childFile.getName())) {
+                                            ignoreFile = true;
+                                            continue;
+                                        }
+                                    }
+                                    if (!ignoreFile)
+                                        fileList.add(childFile);
+                                }
+
+                                TarGzip.compressFiles(fileList, deploymentFile);
+                            }
 
                             listener.getLogger().println("[app-deploy] Starting Tsuru application deployment ========>");
                             listener.getLogger().flush();

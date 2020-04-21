@@ -96,6 +96,15 @@ class TsuruDSL implements Serializable {
         return executeTsuruAction(TsuruAction.Action.DEPLOY, Param);
     }
 
+    public Boolean deploy_image(String appName, String message, String imageTag) {
+        HashMap<String, String> Param = new HashMap<String, String>();
+        appName = appName.toLowerCase();
+        Param.put("appName", appName);
+        Param.put("message", message);
+        Param.put("imageTag", imageTag);
+        return executeTsuruAction(TsuruAction.Action.DEPLOY, Param);
+    }
+
     public Boolean rollback(String appName, String imageTag) {
         HashMap<String, String> Param = new HashMap<String, String>();
         appName = appName.toLowerCase();

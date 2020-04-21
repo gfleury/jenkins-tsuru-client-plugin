@@ -126,4 +126,38 @@ public class SampleConfigurationTest {
 
         j.assertBuildStatus(Result.FAILURE, p.scheduleBuild2(0));
     }
+
+    @Test
+    public void tryImageDeploy() throws Exception {
+        DumbSlave slave = j.createSlave("slave", null, null);
+        FreeStyleProject f = j.createFreeStyleProject("f"); // the control
+        f.setAssignedNode(slave);
+        WorkflowJob p = j.jenkins.createProject(WorkflowJob.class, "tryImageDeploy");
+        FilePath ws;
+
+        while ((ws = slave.getWorkspaceFor(p)) == null) {
+            Thread.sleep(100);
+        }
+
+        p.setDefinition(new CpsFlowDefinition("tsuru.withAPI('localhost') { tsuru.connect(); tsuru.deploy_image('salveApp', 'no comments around this hack', 'docker.company.com/imageApp:v1.0'); }", false));
+
+        j.assertBuildStatus(Result.FAILURE, p.scheduleBuild2(0));
+    }
+
+    @Test
+    public void tryDeploy() throws Exception {
+        DumbSlave slave = j.createSlave("slave", null, null);
+        FreeStyleProject f = j.createFreeStyleProject("f"); // the control
+        f.setAssignedNode(slave);
+        WorkflowJob p = j.jenkins.createProject(WorkflowJob.class, "tryImageDeploy");
+        FilePath ws;
+
+        while ((ws = slave.getWorkspaceFor(p)) == null) {
+            Thread.sleep(100);
+        }
+
+        p.setDefinition(new CpsFlowDefinition("tsuru.withAPI('localhost') { tsuru.connect(); tsuru.deploy('salveApp', 'no comments around this hack', 'commit123hash'); }", false));
+
+        j.assertBuildStatus(Result.FAILURE, p.scheduleBuild2(0));
+    }
 }
